@@ -304,5 +304,6 @@ async function handleShopifyOrder(req, res = null) {
   }
 }
 
-module.exports = { handleShopifyOrder };
+module.exports = handleShopifyOrder;
+
 
