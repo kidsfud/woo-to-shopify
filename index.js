@@ -1,22 +1,28 @@
-const express = require('express');
-require('dotenv').config();
-const wooToShopify = require('./woo-to-shopify');
-const shopifyToWoo = require('./shopify-to-woo');
-
+const express = require("express");
+const bodyParser = require("body-parser");
 const app = express();
-const PORT = process.env.PORT || 3000;
 
-// Optional: Create simple health route
-app.get('/', (req, res) => {
-  res.send('Woo to Shopify Sync is running!');
+// Import your sync scripts
+const syncWooToShopify = require("./woo-to-shopify");
+const syncShopifyToWoo = require("./shopify-to-woo");
+
+app.use(bodyParser.json());
+
+// WooCommerce webhook
+app.post("/webhook/woocommerce", async (req, res) => {
+  console.log("WooCommerce webhook hit");
+  await syncWooToShopify(req.body); // Assuming you export a function in woo-to-shopify.js
+  res.sendStatus(200);
 });
 
-// Run sync periodically (e.g. every 5 mins)
-setInterval(() => {
-  wooToShopify();
-  shopifyToWoo();
-}, 5 * 60 * 1000); // 5 minutes
+// Shopify webhook
+app.post("/webhook/shopify", async (req, res) => {
+  console.log("Shopify webhook hit");
+  await syncShopifyToWoo(req.body); // Assuming you export a function in shopify-to-woo.js
+  res.sendStatus(200);
+});
 
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
