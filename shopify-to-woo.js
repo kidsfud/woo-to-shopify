@@ -158,52 +158,118 @@
 // --------------------------------------------------------------------------------------------------
 
 
-// shopify-to-woo.js
+// // shopify-to-woo.js
 
+// const axios = require("axios");
+// const woo = require("./woocommerce-api");
+
+// async function handleShopifyOrder(order) {
+//   console.log("📦 Processing Shopify order:", order.id);
+
+//   for (const item of order.line_items) {
+//     const shopifyProductId = item.product_id;
+//     const quantity = item.quantity;
+
+//     console.log(`🔍 Searching WooCommerce product with Shopify ID: ${shopifyProductId}`);
+
+//     try {
+//       // 1. Search products in WooCommerce by custom field
+//       const response = await woo.get("products", {
+//         per_page: 100, // adjust if needed
+//       });
+
+//       const matchingProduct = response.data.find(product => {
+//         const meta = product.meta_data || [];
+//         const match = meta.find(m => m.key === "shopify_product_id" && m.value == shopifyProductId);
+//         return !!match;
+//       });
+
+//       if (!matchingProduct) {
+//         console.warn(`❌ WooCommerce product not found for Shopify ID: ${shopifyProductId}`);
+//         continue;
+//       }
+
+//       const currentStock = matchingProduct.stock_quantity || 0;
+//       const newStock = currentStock - quantity;
+//       const productId = matchingProduct.id;
+
+//       console.log(`🛠 Updating stock for Woo Product ID: ${productId} from ${currentStock} to ${newStock}`);
+
+//       await woo.put(`products/${productId}`, {
+//         stock_quantity: newStock
+//       });
+
+//       console.log(`✅ Stock updated for WooCommerce product ID: ${productId}`);
+//     } catch (err) {
+//       console.error("❌ Error syncing product to WooCommerce:", err.response?.data || err.message);
+//     }
+//   }
+// }
+
+// module.exports = handleShopifyOrder;
+
+
+require("dotenv").config();
 const axios = require("axios");
-const woo = require("./woocommerce-api");
 
-async function handleShopifyOrder(order) {
+module.exports = async function handleShopifyOrder(order, res) {
   console.log("📦 Processing Shopify order:", order.id);
 
+  if (!order || !order.id || !Array.isArray(order.line_items)) {
+    console.error("❌ Invalid Shopify order format");
+    return res.status(400).send("Invalid order format");
+  }
+
   for (const item of order.line_items) {
-    const shopifyProductId = item.product_id;
     const quantity = item.quantity;
+    const shopifyProductId = item.product_id;
 
     console.log(`🔍 Searching WooCommerce product with Shopify ID: ${shopifyProductId}`);
 
     try {
-      // 1. Search products in WooCommerce by custom field
-      const response = await woo.get("products", {
-        per_page: 100, // adjust if needed
-      });
+      // Step 1: Find WooCommerce product with meta key = shopify_product_id
+      const wooProductRes = await axios.get(
+        `${process.env.WOOCOMMERCE_SITE_URL}/wp-json/wc/v3/products`,
+        {
+          params: {
+            consumer_key: process.env.WOOCOMMERCE_CONSUMER_KEY,
+            consumer_secret: process.env.WOOCOMMERCE_CONSUMER_SECRET,
+            meta_key: "shopify_product_id",
+            meta_value: shopifyProductId
+          }
+        }
+      );
 
-      const matchingProduct = response.data.find(product => {
-        const meta = product.meta_data || [];
-        const match = meta.find(m => m.key === "shopify_product_id" && m.value == shopifyProductId);
-        return !!match;
-      });
-
-      if (!matchingProduct) {
-        console.warn(`❌ WooCommerce product not found for Shopify ID: ${shopifyProductId}`);
+      const wooProducts = wooProductRes.data;
+      if (!wooProducts || wooProducts.length === 0) {
+        console.error(`❌ WooCommerce product not found for Shopify ID: ${shopifyProductId}`);
         continue;
       }
 
-      const currentStock = matchingProduct.stock_quantity || 0;
-      const newStock = currentStock - quantity;
-      const productId = matchingProduct.id;
+      const wooProduct = wooProducts[0];
+      console.log(`✅ WooCommerce product found: ${wooProduct.name}`);
 
-      console.log(`🛠 Updating stock for Woo Product ID: ${productId} from ${currentStock} to ${newStock}`);
+      const newStock = wooProduct.stock_quantity - quantity;
 
-      await woo.put(`products/${productId}`, {
-        stock_quantity: newStock
-      });
+      // Step 2: Update WooCommerce product stock
+      await axios.put(
+        `${process.env.WOOCOMMERCE_SITE_URL}/wp-json/wc/v3/products/${wooProduct.id}`,
+        {
+          stock_quantity: newStock
+        },
+        {
+          auth: {
+            username: process.env.WOOCOMMERCE_CONSUMER_KEY,
+            password: process.env.WOOCOMMERCE_CONSUMER_SECRET
+          }
+        }
+      );
 
-      console.log(`✅ Stock updated for WooCommerce product ID: ${productId}`);
+      console.log(`✅ Updated stock for WooCommerce product ${wooProduct.name}: ${newStock}`);
     } catch (err) {
-      console.error("❌ Error syncing product to WooCommerce:", err.response?.data || err.message);
+      console.error("❌ Error syncing product:", err.response?.data || err.message);
     }
   }
-}
 
-module.exports = handleShopifyOrder;
+  res.status(200).send("✅ Shopify order processed and WooCommerce updated");
+};
