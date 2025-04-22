@@ -30,33 +30,78 @@
 //   console.log(`✅ Server listening on port ${PORT}`);
 // });
 
+//------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+// require("dotenv").config();
+// const express = require("express");
+// const bodyParser = require("body-parser");
+
+// const wooToShopifyHandler = require("./woo-to-shopify");
+// const shopifyToWooHandler = require("./shopify-to-woo");
+
+// const app = express();
+// const port = process.env.PORT || 3000;
+
+// app.use(bodyParser.json());
+
+// // 🧃 WooCommerce Webhook Handler
+// app.post("/woo-order-webhook", (req, res) => {
+//   console.log("🔥 WooCommerce webhook received");
+//   wooToShopifyHandler(req, res);
+// });
+
+// // 🛍️ Shopify Webhook Handler
+// app.post("/shopify-order-webhook", (req, res) => {
+//   console.log("🛒 Shopify webhook received");
+//   shopifyToWooHandler(req, res);
+// });
+
+// app.get("/", (req, res) => {
+//   res.send("✅ Webhook server is running");
+// });
+
+// app.listen(port, () => {
+//   console.log(`🚀 Server is running at http://localhost:${port}`);
+// });
+
+
+
+///----------------------------------------------------------------------------------------------------------------------------------
+
+
+// index.js
 require("dotenv").config();
 const express = require("express");
-const bodyParser = require("body-parser");
-
-const wooToShopifyHandler = require("./woo-to-shopify");
-const shopifyToWooHandler = require("./shopify-to-woo");
-
 const app = express();
-const port = process.env.PORT || 3000;
+const port = 3000;
 
-app.use(bodyParser.json());
+const handleWooOrder = require("./woo-to-shopify");
+const handleShopifyOrder = require("./shopify-to-woo");
 
-// 🧃 WooCommerce Webhook Handler
-app.post("/woo-order-webhook", (req, res) => {
-  console.log("🔥 WooCommerce webhook received");
-  wooToShopifyHandler(req, res);
+app.use(express.json());
+
+// WooCommerce order webhook → Shopify stock sync
+app.post("/woo-order-webhook", async (req, res) => {
+  console.log("🔥 WooCommerce webhook hit");
+  try {
+    await handleWooOrder(req.body);
+    res.status(200).send("✅ Woo order processed");
+  } catch (err) {
+    console.error("❌ Woo-to-Shopify error:", err);
+    res.status(500).send("Failed");
+  }
 });
 
-// 🛍️ Shopify Webhook Handler
-app.post("/shopify-order-webhook", (req, res) => {
-  console.log("🛒 Shopify webhook received");
-  shopifyToWooHandler(req, res);
-});
-
-app.get("/", (req, res) => {
-  res.send("✅ Webhook server is running");
+// Shopify order webhook → WooCommerce stock sync
+app.post("/shopify-order-webhook", async (req, res) => {
+  console.log("🔥 Shopify webhook hit");
+  try {
+    await handleShopifyOrder(req.body);
+    res.status(200).send("✅ Shopify order processed");
+  } catch (err) {
+    console.error("❌ Shopify-to-Woo error:", err);
+    res.status(500).send("Failed");
+  }
 });
 
 app.listen(port, () => {

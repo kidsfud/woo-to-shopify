@@ -83,72 +83,127 @@
 ///----------------------------------------------------------------------------------------------------------------------
 
 
-require("dotenv").config();
-const express = require("express");
-const bodyParser = require("body-parser");
+// require("dotenv").config();
+// const express = require("express");
+// const bodyParser = require("body-parser");
+// const axios = require("axios");
+// const wooApi = require("./woocommerce-api");
+
+// const app = express();
+// const port = 3001;
+
+// const { SHOPIFY_ACCESS_TOKEN, SHOPIFY_STORE_URL } = process.env;
+
+// app.use(bodyParser.json());
+
+// app.post("/shopify-to-woo", async (req, res) => {
+//   const { shopify_product_id } = req.body;
+
+//   if (!shopify_product_id) {
+//     return res.status(400).send("Missing shopify_product_id");
+//   }
+
+//   try {
+//     // 1. Get Shopify Product Details
+//     const productRes = await axios.get(
+//       `https://${SHOPIFY_STORE_URL}/admin/api/2024-01/products/${shopify_product_id}.json`,
+//       {
+//         headers: {
+//           "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN,
+//         },
+//       }
+//     );
+
+//     const shopifyProduct = productRes.data.product;
+//     const variant = shopifyProduct.variants[0];
+//     const shopifyInventory = variant.inventory_quantity;
+//     const productTitle = shopifyProduct.title;
+
+//     console.log(`🔄 Shopify ${productTitle} has ${shopifyInventory} in stock`);
+
+//     // 2. Find WooCommerce Product (by name for now)
+//     const wooRes = await wooApi.get("products", {
+//       search: productTitle,
+//     });
+
+//     const wooProduct = wooRes.data.find(p => p.name.toLowerCase() === productTitle.toLowerCase());
+
+//     if (!wooProduct) {
+//       return res.status(404).send("WooCommerce product not found");
+//     }
+
+//     const wooProductId = wooProduct.id;
+
+//     // 3. Update WooCommerce Stock
+//     await wooApi.put(`products/${wooProductId}`, {
+//       stock_quantity: shopifyInventory,
+//       manage_stock: true,
+//     });
+
+//     console.log(`✅ Synced WooCommerce stock for "${productTitle}" → ${shopifyInventory}`);
+
+//     res.send("Stock synced");
+//   } catch (err) {
+//     console.error("❌ Error syncing stock:", err.response?.data || err.message);
+//     res.status(500).send("Error syncing stock");
+//   }
+// });
+
+// app.listen(port, () => {
+//   console.log(`🚀 Shopify to Woo sync running at http://localhost:${port}`);
+// });
+
+
+
+// --------------------------------------------------------------------------------------------------
+
+
+// shopify-to-woo.js
+
 const axios = require("axios");
-const wooApi = require("./woocommerce-api");
+const woo = require("./woocommerce-api");
 
-const app = express();
-const port = 3001;
+async function handleShopifyOrder(order) {
+  console.log("📦 Processing Shopify order:", order.id);
 
-const { SHOPIFY_ACCESS_TOKEN, SHOPIFY_STORE_URL } = process.env;
+  for (const item of order.line_items) {
+    const shopifyProductId = item.product_id;
+    const quantity = item.quantity;
 
-app.use(bodyParser.json());
+    console.log(`🔍 Searching WooCommerce product with Shopify ID: ${shopifyProductId}`);
 
-app.post("/shopify-to-woo", async (req, res) => {
-  const { shopify_product_id } = req.body;
+    try {
+      // 1. Search products in WooCommerce by custom field
+      const response = await woo.get("products", {
+        per_page: 100, // adjust if needed
+      });
 
-  if (!shopify_product_id) {
-    return res.status(400).send("Missing shopify_product_id");
-  }
+      const matchingProduct = response.data.find(product => {
+        const meta = product.meta_data || [];
+        const match = meta.find(m => m.key === "shopify_product_id" && m.value == shopifyProductId);
+        return !!match;
+      });
 
-  try {
-    // 1. Get Shopify Product Details
-    const productRes = await axios.get(
-      `https://${SHOPIFY_STORE_URL}/admin/api/2024-01/products/${shopify_product_id}.json`,
-      {
-        headers: {
-          "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN,
-        },
+      if (!matchingProduct) {
+        console.warn(`❌ WooCommerce product not found for Shopify ID: ${shopifyProductId}`);
+        continue;
       }
-    );
 
-    const shopifyProduct = productRes.data.product;
-    const variant = shopifyProduct.variants[0];
-    const shopifyInventory = variant.inventory_quantity;
-    const productTitle = shopifyProduct.title;
+      const currentStock = matchingProduct.stock_quantity || 0;
+      const newStock = currentStock - quantity;
+      const productId = matchingProduct.id;
 
-    console.log(`🔄 Shopify ${productTitle} has ${shopifyInventory} in stock`);
+      console.log(`🛠 Updating stock for Woo Product ID: ${productId} from ${currentStock} to ${newStock}`);
 
-    // 2. Find WooCommerce Product (by name for now)
-    const wooRes = await wooApi.get("products", {
-      search: productTitle,
-    });
+      await woo.put(`products/${productId}`, {
+        stock_quantity: newStock
+      });
 
-    const wooProduct = wooRes.data.find(p => p.name.toLowerCase() === productTitle.toLowerCase());
-
-    if (!wooProduct) {
-      return res.status(404).send("WooCommerce product not found");
+      console.log(`✅ Stock updated for WooCommerce product ID: ${productId}`);
+    } catch (err) {
+      console.error("❌ Error syncing product to WooCommerce:", err.response?.data || err.message);
     }
-
-    const wooProductId = wooProduct.id;
-
-    // 3. Update WooCommerce Stock
-    await wooApi.put(`products/${wooProductId}`, {
-      stock_quantity: shopifyInventory,
-      manage_stock: true,
-    });
-
-    console.log(`✅ Synced WooCommerce stock for "${productTitle}" → ${shopifyInventory}`);
-
-    res.send("Stock synced");
-  } catch (err) {
-    console.error("❌ Error syncing stock:", err.response?.data || err.message);
-    res.status(500).send("Error syncing stock");
   }
-});
+}
 
-app.listen(port, () => {
-  console.log(`🚀 Shopify to Woo sync running at http://localhost:${port}`);
-});
+module.exports = handleShopifyOrder;
