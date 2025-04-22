@@ -231,25 +231,23 @@
 require("dotenv").config();
 const axios = require("axios");
 
-async function handleShopifyOrder(req, res) {
+async function handleShopifyOrder(req, res = null) {
   try {
     const order = req.body;
     console.log("📦 Processing Shopify order:", order.id);
 
     if (!order || !order.line_items || order.line_items.length === 0) {
       console.warn("❌ Invalid order payload");
-      if (res) return res.status(400).send("Invalid order payload");
+      if (res?.status) return res.status(400).send("Invalid order payload");
       return;
     }
 
     for (const item of order.line_items) {
       const quantity = item.quantity;
-
-      // Get the Shopify product ID
       const shopifyProductId = item.product_id;
       console.log(`🔍 Searching WooCommerce product with Shopify ID: ${shopifyProductId}`);
 
-      // Search WooCommerce for product with matching meta field
+      // Search WooCommerce for product using custom meta field
       const wooProductRes = await axios.get(
         `${process.env.WOOCOMMERCE_SITE_URL}/wp-json/wc/v3/products`,
         {
@@ -270,11 +268,13 @@ async function handleShopifyOrder(req, res) {
       }
 
       const wooProduct = wooProducts[0];
+      const currentStock = parseInt(wooProduct.stock_quantity) || 0;
+      const newStock = Math.max(0, currentStock - quantity); // prevent negative stock
+
       console.log(`✅ WooCommerce product found: ${wooProduct.name}`);
+      console.log(`🔢 Current stock: ${currentStock}, New stock: ${newStock}`);
 
-      // Update WooCommerce stock
-      const newStock = (parseInt(wooProduct.stock_quantity) || 0) - quantity;
-
+      // Update the stock on WooCommerce
       await axios.put(
         `${process.env.WOOCOMMERCE_SITE_URL}/wp-json/wc/v3/products/${wooProduct.id}`,
         {
@@ -284,9 +284,6 @@ async function handleShopifyOrder(req, res) {
           auth: {
             username: process.env.WOOCOMMERCE_CONSUMER_KEY,
             password: process.env.WOOCOMMERCE_CONSUMER_SECRET
-          },
-          headers: {
-            "Content-Type": "application/json"
           }
         }
       );
@@ -294,19 +291,16 @@ async function handleShopifyOrder(req, res) {
       console.log(`✅ Updated stock for WooCommerce product ${wooProduct.name}: ${newStock}`);
     }
 
-    if (res && typeof res.status === "function") {
-      return res.status(200).send("✅ Shopify order processed and WooCommerce updated");
-    } else {
-      console.log("✅ Shopify order processed and WooCommerce updated (no response object)");
+    if (res?.status) {
+      return res.status(200).send("✅ Shopify order processed and WooCommerce stock updated");
     }
   } catch (err) {
     console.error("❌ Shopify-to-Woo error:", err.message || err);
 
-    if (res && typeof res.status === "function") {
+    if (res?.status) {
       return res.status(500).send("Error processing Shopify order");
     }
   }
 }
 
 module.exports = handleShopifyOrder;
-
