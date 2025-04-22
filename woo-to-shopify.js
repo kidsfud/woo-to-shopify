@@ -16,9 +16,11 @@
 // } = process.env;
 
 // app.post("/woo-order-webhook", async (req, res) => {
+//   console.log("🔥 Webhook hit");
 //   const order = req.body;
 
-//   if (!order || Object.keys(order).length === 0) {
+//   // ✅ Check for empty or invalid order payload
+//   if (!order || Object.keys(order).length === 0 || !order.id) {
 //     console.warn("❌ Received empty or undefined body");
 //     return res.status(200).send("Ignored empty payload");
 //   }
@@ -29,7 +31,6 @@
 //     return res.status(400).send("Invalid order format");
 //   }
 
-//   console.log("🔥 Webhook hit");
 //   console.log("📦 Order ID:", order.id);
 
 //   for (const item of order.line_items) {
@@ -94,17 +95,11 @@
 
 
 
-// ------------------------------------------------------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------------------------------------
+
 
 require("dotenv").config();
-const express = require("express");
-const bodyParser = require("body-parser");
 const axios = require("axios");
-
-const app = express();
-const port = 3000;
-
-app.use(bodyParser.json());
 
 const {
   SHOPIFY_ACCESS_TOKEN,
@@ -112,11 +107,10 @@ const {
   SHOPIFY_LOCATION_ID
 } = process.env;
 
-app.post("/woo-order-webhook", async (req, res) => {
-  console.log("🔥 Webhook hit");
+module.exports = async function handleWooOrderWebhook(req, res) {
+  console.log("🔥 WooCommerce Webhook hit");
   const order = req.body;
 
-  // ✅ Check for empty or invalid order payload
   if (!order || Object.keys(order).length === 0 || !order.id) {
     console.warn("❌ Received empty or undefined body");
     return res.status(200).send("Ignored empty payload");
@@ -184,8 +178,4 @@ app.post("/woo-order-webhook", async (req, res) => {
   }
 
   res.status(200).send("✅ Webhook processed");
-});
-
-app.listen(port, () => {
-  console.log(`🚀 Server is running at http://localhost:${port}`);
-});
+};
