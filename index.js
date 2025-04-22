@@ -112,56 +112,38 @@
 
 
 ////-----------------------------------------------------------------------------------------------------
-
-
 require("dotenv").config();
 const express = require("express");
 const bodyParser = require("body-parser");
 
-const handleWooOrder = require("./woo-to-shopify");
-const handleShopifyOrder = require("./shopify-to-woo"); // ✅ Make sure this line matches the file name exactly
+const handleWooOrder     = require("./woo-to-shopify");
+const handleShopifyOrder = require("./shopify-to-woo");
 
 const app = express();
-const port = 3000;
+const PORT = process.env.PORT || 3000;
 
+// parse JSON bodies
 app.use(bodyParser.json());
 
-app.post("/woo-order-webhook", async (req, res) => {
+// ───────────────────────────────────────────────────────────────
+// Webhook: WooCommerce → Shopify
+// ───────────────────────────────────────────────────────────────
+app.post("/woo-order-webhook", (req, res) => {
   console.log("🔥 WooCommerce webhook hit");
-  const order = req.body;
-
-  if (!order || !order.id || !order.line_items) {
-    console.error("❌ Invalid WooCommerce order payload");
-    return res.status(400).send("Invalid payload");
-  }
-
-  try {
-    await handleWooOrder(order);
-    res.status(200).send("✅ WooCommerce order processed");
-  } catch (error) {
-    console.error("❌ Woo-to-Shopify error:", error);
-    res.status(500).send("Error processing WooCommerce order");
-  }
+  // pass req/res into your handler
+  handleWooOrder(req, res);
 });
 
-app.post("/shopify-order-webhook", async (req, res) => {
+// ───────────────────────────────────────────────────────────────
+// Webhook: Shopify → WooCommerce
+// ───────────────────────────────────────────────────────────────
+app.post("/shopify-order-webhook", (req, res) => {
   console.log("🔥 Shopify webhook hit");
-  const order = req.body;
-
-  if (!order || !order.id || !order.line_items) {
-    console.error("❌ Invalid or empty Shopify order payload received");
-    return res.status(400).send("Invalid payload");
-  }
-
-  try {
-    await handleShopifyOrder(order); // ✅ This function must be correctly imported above
-    res.status(200).send("✅ Shopify order processed");
-  } catch (error) {
-    console.error("❌ Shopify-to-Woo error:", error);
-    res.status(500).send("Error processing Shopify order");
-  }
+  console.log("📥 Raw body:", JSON.stringify(req.body, null, 2));
+  // now req.body will be defined inside your handler
+  handleShopifyOrder(req, res);
 });
 
-app.listen(port, () => {
-  console.log(`🚀 Server is running at http://localhost:${port}`);
+app.listen(PORT, () => {
+  console.log(`🚀 Server is running on port ${PORT}`);
 });
