@@ -120,24 +120,27 @@
 
 ///------------------------------------------------------------------------------
 
-
+require('dotenv').config();
 const express = require('express');
-const dotenv = require('dotenv');
 const bodyParser = require('body-parser');
-const shopifyInventoryUpdate = require('./shopify-inventory-update');
-
-dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const port = process.env.PORT || 3000;
 
-// Shopify webhook uses raw body
+// Skip HMAC, use raw body only for this route
+const shopifyInventoryUpdate = require('./shopify-inventory-update');
+
 app.use(
   '/shopify-inventory-update-webhook',
   bodyParser.raw({ type: 'application/json' }),
   shopifyInventoryUpdate
 );
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+// Add this to keep server running
+app.get('/', (req, res) => {
+  res.send('Server is up and running!');
+});
+
+app.listen(port, () => {
+  console.log(`Server is listening on port ${port}`);
 });

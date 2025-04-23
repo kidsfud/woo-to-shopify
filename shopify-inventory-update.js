@@ -165,58 +165,56 @@
 
 //-------------------------------------------------------------------------------------------------------
 
-
-
+const express = require('express');
 const crypto = require('crypto');
-const fetch = require('node-fetch'); // Make sure this is installed!
-require('dotenv').config();
-const { updateWooCommerceStock } = require('./woocommerce-api'); // You should already have this
+const WooCommerceRestApi = require("@woocommerce/woocommerce-rest-api").default;
+const router = express.Router();
 
-// HMAC verification
-function verifyShopifyWebhook(req) {
-  const hmacHeader = req.headers['x-shopify-hmac-sha256'];
-  const generatedHash = crypto
-    .createHmac('sha256', process.env.SHOPIFY_WEBHOOK_SECRET)
-    .update(req.body, 'utf8')
-    .digest('base64');
+// WooCommerce API setup
+const wooApi = new WooCommerceRestApi({
+  url: process.env.WOOCOMMERCE_URL,
+  consumerKey: process.env.WOOCOMMERCE_CONSUMER_KEY,
+  consumerSecret: process.env.WOOCOMMERCE_CONSUMER_SECRET,
+  version: 'wc/v3'
+});
 
-//   return generatedHash === hmacHeader;
-    return crypto.timingSafeEqual(Buffer.from(generatedHash), Buffer.from(hmacHeader));
-}
-
-const shopifyInventoryUpdate = async (req, res) => {
-  if (!verifyShopifyWebhook(req)) {
-    console.error('HMAC verification failed');
-    return res.status(401).send('Unauthorized');
-  }
-
+router.post('/shopify-inventory-update-webhook', async (req, res) => {
   try {
     const payload = JSON.parse(req.body.toString('utf8'));
-
+    
     const inventoryItemId = payload.inventory_item_id;
     const available = payload.available;
 
-    console.log(`Inventory Update: Item ID ${inventoryItemId} now has quantity ${available}`);
+    console.log("Received Inventory Update from Shopify:", inventoryItemId, available);
 
-    // Now we find the matching WooCommerce product using shopify_product_id custom field
-    const response = await fetch(`${process.env.WOOCOMMERCE_API_URL}/wp-json/wc/v3/products?meta_key=shopify_product_id&meta_value=${inventoryItemId}&consumer_key=${process.env.WC_CONSUMER_KEY}&consumer_secret=${process.env.WC_CONSUMER_SECRET}`);
+    // Now, find the WooCommerce product with matching Shopify ID
+    const { data } = await wooApi.get('products', {
+      per_page: 100
+    });
 
-    const products = await response.json();
-    if (!products.length) {
-      console.warn('No matching WooCommerce product found');
-      return res.status(200).send('No match');
+    const matchingProduct = data.find(
+      product => product.meta_data?.find(
+        meta => meta.key === 'shopify_product_id' && meta.value == inventoryItemId
+      )
+    );
+
+    if (!matchingProduct) {
+      console.log('No matching WooCommerce product found for Shopify inventory item:', inventoryItemId);
+      return res.status(404).send('Product not found');
     }
 
-    const wooProductId = products[0].id;
+    // Update WooCommerce stock
+    await wooApi.put(`products/${matchingProduct.id}`, {
+      stock_quantity: available,
+      manage_stock: true
+    });
 
-    // Update stock in WooCommerce
-    await updateWooCommerceStock(wooProductId, available);
-
+    console.log(`WooCommerce stock updated for product ${matchingProduct.id} to ${available}`);
     res.status(200).send('Inventory synced');
-  } catch (err) {
-    console.error('Webhook handling error:', err);
-    res.status(500).send('Server error');
+  } catch (error) {
+    console.error("Error syncing inventory:", error.message);
+    res.status(500).send('Error processing webhook');
   }
-};
+});
 
-module.exports = shopifyInventoryUpdate;
+module.exports = router;
