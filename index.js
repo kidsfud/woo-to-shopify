@@ -76,7 +76,28 @@
 
 // ----------------------THE ABOVE WORKED WELL WITH THE ORDER TYPE SYNC----------------------------------------------------------------
 
+// const express = require('express');
+// const dotenv = require('dotenv');
+// const shopifyInventoryUpdate = require('./shopify-inventory-update');
+
+// dotenv.config();
+
+// const app = express();
+// const PORT = process.env.PORT || 3000;
+
+// // Attach Shopify inventory webhook route
+// app.use('/shopify-inventory-update-webhook', shopifyInventoryUpdate);
+
+// // Start server
+// app.listen(PORT, () => {
+//   console.log(`Server running on port ${PORT}`);
+// });
+
+
+// ----------------------------------------------------------------
+
 const express = require('express');
+const bodyParser = require('body-parser');
 const dotenv = require('dotenv');
 const shopifyInventoryUpdate = require('./shopify-inventory-update');
 
@@ -85,10 +106,13 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Attach Shopify inventory webhook route
-app.use('/shopify-inventory-update-webhook', shopifyInventoryUpdate);
+// Attach raw body parser BEFORE JSON middleware
+app.use(
+  '/shopify-inventory-update-webhook',
+  bodyParser.raw({ type: 'application/json' }),
+  shopifyInventoryUpdate
+);
 
-// Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
