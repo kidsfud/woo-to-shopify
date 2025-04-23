@@ -180,7 +180,8 @@ function verifyShopifyWebhook(req) {
     .update(req.body, 'utf8')
     .digest('base64');
 
-  return generatedHash === hmacHeader;
+//   return generatedHash === hmacHeader;
+    return crypto.timingSafeEqual(Buffer.from(generatedHash), Buffer.from(hmacHeader));
 }
 
 const shopifyInventoryUpdate = async (req, res) => {
