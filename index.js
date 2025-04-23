@@ -112,6 +112,45 @@
 
 
 ////-----------------------------------------------------------------------------------------------------
+// require("dotenv").config();
+// const express = require("express");
+// const bodyParser = require("body-parser");
+
+// const handleWooOrder     = require("./woo-to-shopify");
+// const handleShopifyOrder = require("./shopify-to-woo");
+
+// const app = express();
+// const PORT = process.env.PORT || 3000;
+
+// // parse JSON bodies
+// app.use(bodyParser.json());
+
+// // ───────────────────────────────────────────────────────────────
+// // Webhook: WooCommerce → Shopify
+// // ───────────────────────────────────────────────────────────────
+// app.post("/woo-order-webhook", (req, res) => {
+//   console.log("🔥 WooCommerce webhook hit");
+//   // pass req/res into your handler
+//   handleWooOrder(req, res);
+// });
+
+// // ───────────────────────────────────────────────────────────────
+// // Webhook: Shopify → WooCommerce
+// // ───────────────────────────────────────────────────────────────
+// app.post("/shopify-order-webhook", (req, res) => {
+//   console.log("🔥 Shopify webhook hit");
+//   console.log("📥 Raw body:", JSON.stringify(req.body, null, 2));
+//   // now req.body will be defined inside your handler
+//   handleShopifyOrder(req, res);
+// });
+
+// app.listen(PORT, () => {
+//   console.log(`🚀 Server is running on port ${PORT}`);
+// });
+
+
+/// ------------------------------------------------------------------------------------------
+
 require("dotenv").config();
 const express = require("express");
 const bodyParser = require("body-parser");
@@ -122,26 +161,21 @@ const handleShopifyOrder = require("./shopify-to-woo");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// parse JSON bodies
 app.use(bodyParser.json());
 
-// ───────────────────────────────────────────────────────────────
-// Webhook: WooCommerce → Shopify
-// ───────────────────────────────────────────────────────────────
+// WooCommerce → Shopify
 app.post("/woo-order-webhook", (req, res) => {
   console.log("🔥 WooCommerce webhook hit");
-  // pass req/res into your handler
-  handleWooOrder(req, res);
+  res.sendStatus(200);                // 1) ACK immediately
+  handleWooOrder(req.body);           // 2) then process
 });
 
-// ───────────────────────────────────────────────────────────────
-// Webhook: Shopify → WooCommerce
-// ───────────────────────────────────────────────────────────────
+// Shopify → WooCommerce
 app.post("/shopify-order-webhook", (req, res) => {
   console.log("🔥 Shopify webhook hit");
   console.log("📥 Raw body:", JSON.stringify(req.body, null, 2));
-  // now req.body will be defined inside your handler
-  handleShopifyOrder(req, res);
+  res.sendStatus(200);                // 1) ACK immediately
+  handleShopifyOrder(req.body);       // 2) then process
 });
 
 app.listen(PORT, () => {
