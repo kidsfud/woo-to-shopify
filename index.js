@@ -48,7 +48,7 @@ async function loadWooMap() {
     }
     page++;
   }
-  console.log(`✅ Loaded ${wooProductMap.size} products into Woo→Shopify map`);
+  console.log(`✅ Loaded ${wooProductMap.size} products into Woo→Shopify  map`);
 }
 
 // Start the server only after loading the map
