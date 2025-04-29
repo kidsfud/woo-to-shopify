@@ -33,7 +33,7 @@ router.post('/shopify-inventory-update-webhook', async (req, res) => {
     );
 
     if (!matchingProduct) {
-      console.log('No matching WooCommerce product found for Shopify inventory item:', inventoryItemId);
+      console.log('No matching WooCommerce product found for Shopify inventory  item:', inventoryItemId);
       return res.status(404).send('Product not found');
     }
 
