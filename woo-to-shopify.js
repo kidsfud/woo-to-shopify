@@ -262,7 +262,6 @@
 
 // ----------------------------------------------------------------------------------------------------------------
 
-
 // woo-to-shopify.js
 require("dotenv").config();
 const axios = require("axios");
@@ -274,14 +273,8 @@ const {
 } = process.env;
 
 module.exports = async function handleWooOrderWebhook(order) {
-  if (!order || Object.keys(order).length === 0 || !order.id) {
-    console.warn("❌ Received empty or undefined body");
-    return;
-  }
-
-  if (!order.line_items || !Array.isArray(order.line_items)) {
-    console.log("📨 Full Order Payload:\n", order);
-    console.error("❌ Invalid Order Format");
+  if (!order || !order.line_items || !Array.isArray(order.line_items)) {
+    console.error("❌ Invalid WooCommerce order format:", order);
     return;
   }
 
@@ -290,9 +283,8 @@ module.exports = async function handleWooOrderWebhook(order) {
   for (const item of order.line_items) {
     const quantity = item.quantity;
     const meta = item.meta_data || [];
-    const shopifyMeta = meta.find(m => m.key === "shopify_product_id");
 
-    // ✅ Ensure it's treated as a string
+    const shopifyMeta = meta.find(m => m.key === "shopify_product_id");
     const shopifyProductId = shopifyMeta ? String(shopifyMeta.value) : null;
 
     if (!shopifyProductId) {
@@ -300,10 +292,10 @@ module.exports = async function handleWooOrderWebhook(order) {
       continue;
     }
 
-    console.log(`🔍 Shopify Product ID (type: ${typeof shopifyProductId}): ${shopifyProductId}`);
+    console.log(`🔍 Shopify Product ID: ${shopifyProductId}`);
 
     try {
-      // Step 1: Get product variants
+      // ✅ Step 1: Get variants for this product
       const variantRes = await axios.get(
         `https://${SHOPIFY_STORE_URL}/admin/api/2024-01/products/${shopifyProductId}/variants.json`,
         {
@@ -315,32 +307,38 @@ module.exports = async function handleWooOrderWebhook(order) {
       );
 
       const variants = variantRes.data.variants;
+
       if (!variants || variants.length === 0) {
-        console.error("❌ No variants found for this product.");
+        console.error(`❌ No variants found for product ID ${shopifyProductId}`);
         continue;
       }
 
-      const inventoryItemId = variants[0].inventory_item_id;
-      console.log(`➡️ Updating inventory item ID: ${inventoryItemId} | Quantity to reduce: ${quantity}`);
+      // ✅ Use first variant (or customize logic to match variant by SKU/title if needed)
+      const selectedVariant = variants[0];
+      const inventoryItemId = selectedVariant.inventory_item_id;
 
-      // Step 2: Adjust inventory
-      const adjustEndpoint = `https://${SHOPIFY_STORE_URL}/admin/api/2024-01/inventory_levels/adjust.json`;
-      const payload = {
-        location_id: SHOPIFY_LOCATION_ID,
-        inventory_item_id: inventoryItemId,
-        available_adjustment: -quantity
-      };
+      console.log(`➡️ Updating inventory_item_id: ${inventoryItemId} | Reduce by: ${quantity}`);
 
-      await axios.post(adjustEndpoint, payload, {
-        headers: {
-          "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN,
-          "Content-Type": "application/json"
+      // ✅ Step 2: Adjust inventory
+      await axios.post(
+        `https://${SHOPIFY_STORE_URL}/admin/api/2024-01/inventory_levels/adjust.json`,
+        {
+          location_id: SHOPIFY_LOCATION_ID,
+          inventory_item_id: inventoryItemId,
+          available_adjustment: -quantity
+        },
+        {
+          headers: {
+            "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN,
+            "Content-Type": "application/json"
+          }
         }
-      });
+      );
 
-      console.log(`✅ Inventory updated for inventory_item_id: ${inventoryItemId}`);
+      console.log(`✅ Inventory updated for item: ${item.name}`);
     } catch (err) {
-      console.error("❌ Error updating Shopify product:", err.response?.data || err.message);
+      const errMsg = err.response?.data || err.message;
+      console.error("❌ Shopify API error:", JSON.stringify(errMsg, null, 2));
     }
   }
 };
