@@ -346,7 +346,7 @@
 
 
 // -------------------------------------------------------------------------------------------------------------
-
+// woo-to-shopify.js
 require("dotenv").config();
 const axios = require("axios");
 
@@ -373,28 +373,28 @@ module.exports = async function handleWooOrderWebhook(order) {
   for (const item of order.line_items) {
     const quantity = item.quantity;
     const meta = item.meta_data || [];
-
     const shopifyMeta = meta.find(m => m.key === "shopify_product_id");
     const shopifyProductId = shopifyMeta ? String(shopifyMeta.value) : null;
+
+    console.log(`🔍 Shopify Product ID (as string): ${shopifyProductId}`);
 
     if (!shopifyProductId) {
       console.warn(`⚠️ No Shopify Product ID found for item: ${item.name}`);
       continue;
     }
 
-    console.log(`🔍 Shopify Product ID (as string): ${shopifyProductId}`);
-
     try {
-      // Step 1: Get product variants using the product ID
-      const variantRes = await axios.get(
-        `https://${SHOPIFY_STORE_URL}/admin/api/2024-01/products/${shopifyProductId}/variants.json`,
-        {
-          headers: {
-            "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN,
-            "Content-Type": "application/json"
-          }
+      // Step 1: Get variants of the Shopify product
+      const variantUrl = `https://${SHOPIFY_STORE_URL}/admin/api/2024-01/products/${shopifyProductId}/variants.json`;
+
+      console.log("🔎 Getting variants from:", variantUrl);
+
+      const variantRes = await axios.get(variantUrl, {
+        headers: {
+          "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN,
+          "Content-Type": "application/json"
         }
-      );
+      });
 
       const variants = variantRes.data.variants;
       if (!variants || variants.length === 0) {
@@ -402,20 +402,21 @@ module.exports = async function handleWooOrderWebhook(order) {
         continue;
       }
 
-      // Step 2: Get inventory_item_id from first variant
       const inventoryItemId = variants[0].inventory_item_id;
+      console.log(`➡️ Updating inventory item ID: ${inventoryItemId} | Quantity: ${quantity}`);
 
-      console.log(`➡️ Updating inventory item ID: ${inventoryItemId} | Quantity: -${quantity}`);
-
-      // Step 3: Adjust inventory
-      const adjustEndpoint = `https://${SHOPIFY_STORE_URL}/admin/api/2024-01/inventory_levels/adjust.json`;
+      // Step 2: Adjust inventory
+      const adjustUrl = `https://${SHOPIFY_STORE_URL}/admin/api/2024-01/inventory_levels/adjust.json`;
       const payload = {
         location_id: SHOPIFY_LOCATION_ID,
         inventory_item_id: inventoryItemId,
         available_adjustment: -quantity
       };
 
-      await axios.post(adjustEndpoint, payload, {
+      console.log("📤 Sending inventory adjustment to:", adjustUrl);
+      console.log("📦 Payload:", JSON.stringify(payload, null, 2));
+
+      await axios.post(adjustUrl, payload, {
         headers: {
           "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN,
           "Content-Type": "application/json"
